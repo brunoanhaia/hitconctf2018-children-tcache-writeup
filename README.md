@@ -628,15 +628,11 @@ Com o endereço base da `libc` conhecido, obtêm-se as posições absolutas de `
    - Com o bloco livre de `0x510` bytes no *unsorted bin* (iniciado em `X + 0x1a0`), a chamada `ct.add(0x120, b"1111")` aloca um chunk de `0x130` bytes no índice 1.
    - Ambos os índices 0 e 1 passam a apontar para o mesmo chunk (`X + 0x1b0`).
 2. **Execução de Double Free no `tcache[0x130]`:**
-   - Liberação do índice 0 (`ct.delete(0)`): O chunk é inserido no `tcache[0x130]`.
-     $$\mathtt{tcache[0x130]} \longrightarrow \mathtt{Chunk}_X \longrightarrow \mathtt{NULL}$$
-   - Liberação do índice 1 (`ct.delete(1)`): Como o índice 1 referencia o mesmo `Chunk_X` e a `glibc 2.27` não dispõe do campo de verificação `key`, o alocador reinsere `Chunk_X` na cabeça da lista, estabelecendo uma referência circular:
-     $$\mathtt{tcache[0x130]} \longrightarrow \mathtt{Chunk}_X \longrightarrow \mathtt{Chunk}_X$$
+   - Liberação do índice 0 (`ct.delete(0)`): O chunk é inserido no `tcache[0x130]`, e a lista fica `tcache[0x130] → Chunk_X → NULL`.
+   - Liberação do índice 1 (`ct.delete(1)`): Como o índice 1 referencia o mesmo `Chunk_X` e a `glibc 2.27` não dispõe do campo de verificação `key`, o alocador reinsere `Chunk_X` na cabeça da lista, estabelecendo uma referência circular: `tcache[0x130] → Chunk_X → Chunk_X`.
 3. **Envenenamento da lista do tcache (*Tcache Poisoning*):**
-   - **1ª alocação de `0x120` (`ct.add(0x120, p64(hook))`):** O alocador retorna `Chunk_X`. A escrita grava os 6 bytes significativos do endereço de `__malloc_hook` no campo `next` do chunk livre subsequente:
-     $$\mathtt{tcache[0x130]} \longrightarrow \mathtt{Chunk}_X \longrightarrow \mathtt{\_\_malloc\_hook}$$
-   - **2ª alocação de `0x120` (`ct.add(0x120, b"aaaa")`):** Retira a segunda referência a `Chunk_X`, posicionando `__malloc_hook` no topo da lista:
-     $$\mathtt{tcache[0x130]} \longrightarrow \mathtt{\_\_malloc\_hook}$$
+   - **1ª alocação de `0x120` (`ct.add(0x120, p64(hook))`):** O alocador retorna `Chunk_X`. A escrita grava os 6 bytes significativos do endereço de `__malloc_hook` no campo `next` do chunk livre subsequente: `tcache[0x130] → Chunk_X → __malloc_hook`.
+   - **2ª alocação de `0x120` (`ct.add(0x120, b"aaaa")`):** Retira a segunda referência a `Chunk_X`, posicionando `__malloc_hook` no topo da lista: `tcache[0x130] → __malloc_hook`.
    - **3ª alocação de `0x120` (`ct.add(0x120, p64(gadget_addr))`):** O alocador retorna diretamente o ponteiro correspondente a `__malloc_hook`. A chamada `strcpy` grava o endereço de `gadget_addr` no alvo.
 
 ```
