@@ -1,0 +1,16 @@
+# Ambiente virtual Python (venv criado dentro de solver/)
+venv/
+.venv/
+env/
+
+# Cache/bytecode do Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Flag da reprodução local (criada pelo leitor; não versionada)
+flag
+
+# Arquivos de SO/editor
+.DS_Store
+*.swp
