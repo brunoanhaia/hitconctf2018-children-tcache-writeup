@@ -14,3 +14,7 @@ flag
 # Arquivos de SO/editor
 .DS_Store
 *.swp
+
+.venv
+.idea
+pyproject.toml
