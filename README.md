@@ -14,10 +14,13 @@ Write-up e reprodução do desafio **Children Tcache**, categoria Pwn do HITCON 
 - Thayná Marostica Machado da Silva
 
 ## Introdução
-
 Este documento é um **write-up** do desafio *Children Tcache*. Ele registra a análise do binário entregue, a construção e a execução do exploit, as evidências obtidas em cada etapa da cadeia de exploração.
 
-O **Children Tcache** é um desafio de pwn com a descrição `Try more tcache :)`. O alvo é um alocador fictício com menu — `New`, `Show`, `Delete`, `Exit` —, dez slots e limite de `0x2000` bytes por alocação.
+O **Children Tcache** é um desafio de exploração binária (Pwn), amplamente utilizado como referência para o aprendizado de ataques modernos de heap na biblioteca C padrão do Linux (glibc).
+
+O problema foi criado logo após a introdução do tcache (thread-local caching) nas versões 2.26 e 2.27 da glibc. Na época, essa nova estrutura trouxe grandes ganhos de desempenho ao gerenciar pequenas alocações de memória por thread, mas reduziu drasticamente as verificações de segurança tradicionais. Isso abriu espaço para novas técnicas de exploração, como o tcache poisoning e o tcache dup.
+
+No contexto do desafio, o programa apresenta um menu simples de gerenciamento de notas (criar, exibir e deletar) onde ocorre um erro sutil de manipulação de strings. Essa falha gera um estouro de um único byte nulo (off-by-one null byte overflow). A partir desse pequeno deslize, o atacante precisa manipular o layout da memória heap, contornar o comportamento do tcache para vazar endereços da libc e, por fim, sequestrar o fluxo de execução do programa para obter acesso ao sistema.
 
 A falha está na combinação de uma leitura limitada com uma cópia sem limite: `read(0, buf, size)` seguido de `strcpy(dest, buf)`. Quando a entrada ocupa exatamente `size` bytes, o terminador NUL escrito pelo `strcpy` cai um byte além da área útil do chunk. Esse único `0x00` é suficiente para encolher o `size` do chunk vizinho e limpar `PREV_INUSE`.
 
@@ -44,7 +47,6 @@ $   4. Exit               $
 $$$$$$$$$$$$$$$$$$$$$$$$$$$
 Your choice:
 ```
-
 Na prática, o programa mantém na sua memória global dois vetores de 10 posições: um vetor de ponteiros `heap_list[10]` (onde guarda o endereço de cada bloco alocado) e um vetor de tamanhos `size_list[10]`. As quatro opções fazem o seguinte:
 
 - **1. New heap**: procura o primeiro índice livre (de `0` a `9`), pede `Size:` (até `0x2000` bytes), aloca memória com `malloc(size)`, pede `Data:` para o usuário digitar o conteúdo em um buffer temporário na pilha (*stack*) e copia essa entrada para o bloco recém-alocado usando `strcpy`.
@@ -87,11 +89,21 @@ Esta seção estabelece os fundamentos teóricos sobre a organização da memór
 
 ### 2.1 Modelo de Memória e o Alocador ptmalloc2
 
-Durante a execução de um programa em ambiente Linux, o gerenciamento de dados dinâmicos divide-se primordialmente entre dois segmentos de memória:
-- **Pilha (*Stack*):** Estrutura LIFO gerenciada pelo processador através do ponteiro de pilha (`rsp` em x86-64), destinada a variáveis locais, contexto de chamadas e endereços de retorno com tempo de vida restrito ao escopo de cada função.
-- **Heap:** Segmento contíguo de memória utilizado para alocações dinâmicas cujas dimensões ou ciclos de vida não são determinados em tempo de compilação.
+Durante a execução de um programa em ambiente Linux, a memória utilizada para armazenar dados é organizada em diferentes regiões, entre as quais se destacam a **Pilha (Stack)** e o **Heap**. Cada uma possui características próprias e atende a diferentes necessidades de armazenamento e gerenciamento de dados.
+
+- **Pilha (Stack)**: É uma região de memória organizada segundo o princípio **LIFO (Last In, First Out)**, em que o último elemento inserido é o primeiro a ser removido. Seu gerenciamento está associado à execução das funções, sendo utilizada principalmente para armazenar variáveis locais, parâmetros, informações sobre chamadas de funções e endereços de retorno. Em arquiteturas x86-64, o registrador rsp mantém o endereço do topo da pilha. Em geral, os dados armazenados nessa região possuem tempo de vida vinculado à execução do bloco de código ou da função correspondente.
+
+- **Heap**: É a região de memória destinada principalmente ao armazenamento de dados alocados dinamicamente durante a execução do programa. Diferentemente da pilha, o tempo de vida desses dados não está necessariamente associado à execução de uma função, permitindo que permaneçam disponíveis enquanto forem necessários. Seu gerenciamento é realizado por meio de mecanismos de alocação e liberação de memória, como **malloc()**, **free()**, **realloc()** e **calloc()**.
 
 Para evitar o custo de desempenho associado a frequentes chamadas de sistema (`brk` ou `mmap`) a cada solicitação de memória, a biblioteca padrão C (`glibc`) incorpora um alocador interno denominado `ptmalloc2`. O alocador requisita grandes blocos contíguos ao núcleo do sistema operacional (denominados *arenas*) e administra subdivisões menores desses blocos de forma otimizada para atender às chamadas `malloc()`, `free()`, `realloc()` e `calloc()`.
+
+O objetivo desse alocador é reduzir a sobrecarga associada à solicitação frequente de memória diretamente ao sistema operacional. Em vez de recorrer ao núcleo (kernel) a cada chamada de alocação, o ptmalloc2 solicita regiões maiores de memória e gerencia internamente sua divisão em blocos menores, disponibilizando-os conforme as necessidades do programa.
+
+Para obter memória do sistema operacional, o alocador utiliza mecanismos como brk e mmap. A memória obtida é organizada e administrada por estruturas internas chamadas arenas, que permitem controlar os blocos disponíveis, as alocações realizadas e os espaços liberados.
+
+Dessa forma, quando o programa solicita memória por meio de funções como **malloc()** ou **calloc()**, o **ptmalloc2** procura atender à solicitação utilizando os blocos que já administra. Quando necessário, pode solicitar novas regiões de memória ao sistema operacional. Esse mecanismo também é utilizado para operações de redimensionamento e liberação de blocos, realizadas por **realloc()** e **free()**, respectivamente.
+
+O **ptmalloc2** atua como uma camada intermediária entre o programa e o sistema operacional, tornando o gerenciamento da memória dinâmica mais eficiente e reduzindo a necessidade de interações diretas com o kernel.
 
 ### 2.2 Estrutura Interna de Chunks e Metadados (malloc_chunk)
 
