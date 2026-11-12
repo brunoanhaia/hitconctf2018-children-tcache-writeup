@@ -1041,4 +1041,7 @@ O ponto central do método é não aceitar nenhuma afirmação sem uma evidênci
 - Ferramenta `one_gadget`: <https://github.com/david942j/one_gadget>.
 - Documentação do alocador: código-fonte da `glibc 2.27` (`malloc/malloc.c`), em especial `_int_malloc`, `_int_free` e `unlink_chunk` (<https://elixir.bootlin.com/glibc/glibc-2.27/source/malloc/malloc.c>).
 
+## 12. Apresentação em Slides
+
+https://canva.link/jsf60b7wl16d8dm
 
