@@ -703,7 +703,7 @@ Ao construir o exploit sem `pwntools`, falando diretamente com os *pipes* do pro
 
 ---
 
-## 8. Mitigação: como corrigir a falha
+## 8. Estratégias de Mitigação e Hardening: como corrigir a falha
 
 A causa raiz é a combinação `read` limitado + `strcpy` sem limite. Correções possíveis:
 
@@ -728,6 +728,115 @@ A causa raiz é a combinação `read` limitado + `strcpy` sem limite. Correçõe
 | 2.34 | `__malloc_hook`/`__free_hook` removidos; não há alvo trivial de escrita |
 
 A lição central: o off-by-null de 1 byte só vira execução de código porque a versão do alocador permite encadear consolidação, sobreposição, leak e *tcache dup*. Em uma implementação corrigida, o NUL nunca sai do chunk.
+
+A exploração de vulnerabilidades relacionadas ao gerenciamento dinâmico de memória demonstra a importância da adoção de mecanismos de proteção em diferentes camadas do ambiente computacional.
+
+No contexto do desafio Children Tcache, são consideradas as seguintes estratégias:
+
+## 8.1 Prevenção no código-fonte
+
+Validação dos limites de buffers.
+
+Controle rigoroso dos tamanhos de alocação e cópia.
+
+Prevenção de operações double free.
+
+Controle de propriedade e ciclo de vida dos ponteiros.
+
+Utilização de práticas seguras de gerenciamento de memória.
+
+
+![Heap Chunk](heap_chunk.png)
+
+*Figura A — Heap Chunk: Mostrando os metadados que podem sofrer corrupção. Fonte: Próprio autor, com auxílio de IA generativa.*
+
+
+## 8.2 Hardening na compilação
+
+A utilização de mecanismos de proteção oferecidos pelo GCC pode dificultar a exploração de determinadas vulnerabilidades.
+
+Principais opções:
+```
+-fstack-protector-strong
+
+-D_FORTIFY_SOURCE=3
+
+-fPIE -pie
+
+-Wl,-z,relro,-z,now
+
+-Wl,-z,noexecstack
+
+-fstack-clash-protection
+```
+
+![Tcache](tcache.png)
+
+*Figura B — Tcache: A estrutura de ponteiros e a importância do Safe-Linking Fonte: Próprio autor, com auxílio de IA generativa.*
+
+
+## 8.3 Proteções da glibc
+
+A evolução da GNU C Library introduziu mecanismos adicionais de proteção do alocador de memória.
+
+Destacam-se:
+
+Safe-Linking: proteção dos ponteiros das listas encadeadas do Tcache e Fastbins, introduzida na glibc 2.32.
+
+![Overlapping Chunks](overlapping_chunks.png)
+
+*Figura C — Overlapping Chunks: Mostrando a consequência da corrupção e justificando as medidas preventivas. Fonte: Próprio autor, com auxílio de IA generativa.*
+
+Verificações de integridade: mecanismos para detectar inconsistências nas estruturas internas do alocador.
+
+Detecção de Double Free: verificações adicionais para identificar liberações repetidas de blocos de memória.
+
+Remoção dos malloc hooks: a partir da glibc 2.34, os antigos hooks de alocação deixaram de funcionar como mecanismos de interceptação.
+
+Em maio de 2025, foi proposto um aprimoramento na detecção de double free do Tcache, contemplando especificamente um cenário de corrupção de tamanho provocado por um byte nulo excedente.
+
+
+## 8.4 Detecção e diagnóstico
+
+Recomenda-se utilizar ferramentas de análise dinâmica e estática:
+
+AddressSanitizer (ASan).
+
+UndefinedBehaviorSanitizer (UBSan).
+
+Valgrind.
+
+GCC Static Analyzer.
+
+GDB com pwndbg.
+
+## 8.5 Proteções do sistema operacional
+
+ASLR habilitado.
+
+Execução com privilégios mínimos.
+
+Isolamento de processos.
+
+Atualização periódica do sistema operacional e bibliotecas.
+
+Monitoramento de comportamentos anômalos.
+
+## 8.6 Considerações
+
+Os mecanismos de hardening reduzem a superfície de exploração, mas não substituem a correção das vulnerabilidades no código-fonte.
+
+A principal estratégia de mitigação consiste em eliminar a causa da corrupção de memória, complementando essa medida com mecanismos de proteção do compilador, biblioteca de execução e sistema operacional.
+
+## 8.7 Análise comparativa
+
+A investigação deverá comparar o comportamento do desafio em diferentes versões da glibc, identificando quais mecanismos de proteção foram introduzidos e como eles influenciam a viabilidade das técnicas de exploração.
+
+
+![Defesa em Produndidade](defesa_em_profundidade.png)
+
+*Figura D — Defesa em Profundidade: Modelo de defesa em profundidade. Fonte: Próprio autor, com auxílio de IA generativa.*
+
 
 ---
 
