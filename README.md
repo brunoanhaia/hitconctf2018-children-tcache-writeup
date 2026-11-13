@@ -1164,7 +1164,10 @@ As principais contribuições do grupo foram:
 
 ---
 
-## 13. Apresentação em Slides
+## 13. Apresentação em slides
 
 https://canva.link/jsf60b7wl16d8dm
 
+## 14. Apresentação da parte prática
+
+[![Apresentação](https://img.youtube.com/vi/L-aOHjPOyhE/0.jpg)](https://www.youtube.com/watch?v=L-aOHjPOyhE)
